@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Restaurant Order Manager{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <span class="brand">Restaurant Manager</span>
+        <ul class="nav-links">
+            <li><a href="/" id="nav-dashboard">Dashboard</a></li>
+            <li><a href="/tables" id="nav-tables">Tables</a></li>
+            <li><a href="/menu" id="nav-menu">Menu</a></li>
+            <li><a href="/orders" id="nav-orders">Orders</a></li>
+        </ul>
+    </nav>
+
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+
+    <script>
+        // Highlight active nav link
+        const path = window.location.pathname;
+        document.querySelectorAll('.nav-links a').forEach(link => {
+            if (link.getAttribute('href') === path) {
+                link.classList.add('active');
+            }
+        });
+
+        // Helper: API fetch with JSON
+        async function api(url, method = 'GET', body = null) {
+            const opts = {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+            };
+            if (body) opts.body = JSON.stringify(body);
+            const res = await fetch(url, opts);
+            const data = await res.json();
+            if (!res.ok) {
+                alert(data.error || 'Something went wrong');
+                throw new Error(data.error);
+            }
+            return data;
+        }
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

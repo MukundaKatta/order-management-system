@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+{% block title %}Menu - Restaurant Manager{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Menu Management</h1>
+    <div style="display: flex; gap: 0.5rem;">
+        <button class="btn btn-info" onclick="showAddCategory()">+ Category</button>
+        <button class="btn btn-primary" onclick="showAddItem()">+ Menu Item</button>
+    </div>
+</div>
+
+<div id="menu-content">
+    <div class="card text-center">Loading...</div>
+</div>
+
+<!-- Category Modal -->
+<div class="modal-overlay" id="category-modal">
+    <div class="modal">
+        <h2 id="category-modal-title">Add Category</h2>
+        <input type="hidden" id="edit-category-id">
+        <div class="form-group">
+            <label>Category Name</label>
+            <input type="text" id="category-name" required>
+        </div>
+        <div class="form-group">
+            <label>Description</label>
+            <input type="text" id="category-description">
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-outline" onclick="closeCategoryModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveCategory()">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- Menu Item Modal -->
+<div class="modal-overlay" id="item-modal">
+    <div class="modal">
+        <h2 id="item-modal-title">Add Menu Item</h2>
+        <input type="hidden" id="edit-item-id">
+        <div class="form-group">
+            <label>Item Name</label>
+            <input type="text" id="item-name" required>
+        </div>
+        <div class="form-group">
+            <label>Description</label>
+            <textarea id="item-description" rows="2"></textarea>
+        </div>
+        <div class="form-group">
+            <label>Price ($)</label>
+            <input type="number" id="item-price" min="0" step="0.01" required>
+        </div>
+        <div class="form-group">
+            <label>Category</label>
+            <select id="item-category"></select>
+        </div>
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="item-available" checked> Available
+            </label>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-outline" onclick="closeItemModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveItem()">Save</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let categories = [];
+
+async function loadMenu() {
+    const [cats, items] = await Promise.all([
+        api('/api/menu/categories'),
+        api('/api/menu/items'),
+    ]);
+    categories = cats;
+
+    const content = document.getElementById('menu-content');
+    if (cats.length === 0) {
+        content.innerHTML = '<div class="empty-state"><p>No categories yet. Start by adding a category!</p></div>';
+        return;
+    }
+
+    content.innerHTML = cats.map(cat => {
+        const catItems = items.filter(i => i.category_id === cat.id);
+        return `
+            <div class="card" style="margin-bottom: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <div>
+                        <h2>${cat.name}</h2>
+                        <small style="color: var(--gray);">${cat.description || ''}</small>
+                    </div>
+                    <div style="display: flex; gap: 0.25rem;">
+                        <button class="btn btn-sm btn-outline" onclick='editCategory(${JSON.stringify(cat)})'>Edit</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteCategory(${cat.id})">Delete</button>
+                    </div>
+                </div>
+                ${catItems.length === 0
+                    ? '<p style="color: var(--gray);">No items in this category</p>'
+                    : `<table>
+                        <thead>
+                            <tr><th>Name</th><th>Description</th><th>Price</th><th>Status</th><th>Actions</th></tr>
+                        </thead>
+                        <tbody>
+                            ${catItems.map(item => `
+                                <tr>
+                                    <td><strong>${item.name}</strong></td>
+                                    <td>${item.description || '-'}</td>
+                                    <td class="price">$${item.price.toFixed(2)}</td>
+                                    <td><span class="badge badge-${item.is_available ? 'available' : 'occupied'}">${item.is_available ? 'Available' : 'Unavailable'}</span></td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline" onclick='editItem(${JSON.stringify(item)})'>Edit</button>
+                                        <button class="btn btn-sm btn-danger" onclick="deleteItem(${item.id})">Delete</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>`
+                }
+            </div>
+        `;
+    }).join('');
+}
+
+// Category CRUD
+function showAddCategory() {
+    document.getElementById('category-modal-title').textContent = 'Add Category';
+    document.getElementById('edit-category-id').value = '';
+    document.getElementById('category-name').value = '';
+    document.getElementById('category-description').value = '';
+    document.getElementById('category-modal').classList.add('active');
+}
+
+function editCategory(cat) {
+    document.getElementById('category-modal-title').textContent = 'Edit Category';
+    document.getElementById('edit-category-id').value = cat.id;
+    document.getElementById('category-name').value = cat.name;
+    document.getElementById('category-description').value = cat.description || '';
+    document.getElementById('category-modal').classList.add('active');
+}
+
+function closeCategoryModal() {
+    document.getElementById('category-modal').classList.remove('active');
+}
+
+async function saveCategory() {
+    const id = document.getElementById('edit-category-id').value;
+    const data = {
+        name: document.getElementById('category-name').value,
+        description: document.getElementById('category-description').value,
+    };
+    if (!data.name) { alert('Name is required'); return; }
+
+    if (id) {
+        await api(`/api/menu/categories/${id}`, 'PUT', data);
+    } else {
+        await api('/api/menu/categories', 'POST', data);
+    }
+    closeCategoryModal();
+    loadMenu();
+}
+
+async function deleteCategory(id) {
+    if (!confirm('Delete this category?')) return;
+    await api(`/api/menu/categories/${id}`, 'DELETE');
+    loadMenu();
+}
+
+// Menu Item CRUD
+function showAddItem() {
+    document.getElementById('item-modal-title').textContent = 'Add Menu Item';
+    document.getElementById('edit-item-id').value = '';
+    document.getElementById('item-name').value = '';
+    document.getElementById('item-description').value = '';
+    document.getElementById('item-price').value = '';
+    document.getElementById('item-available').checked = true;
+    populateCategorySelect();
+    document.getElementById('item-modal').classList.add('active');
+}
+
+function editItem(item) {
+    document.getElementById('item-modal-title').textContent = 'Edit Menu Item';
+    document.getElementById('edit-item-id').value = item.id;
+    document.getElementById('item-name').value = item.name;
+    document.getElementById('item-description').value = item.description || '';
+    document.getElementById('item-price').value = item.price;
+    document.getElementById('item-available').checked = item.is_available;
+    populateCategorySelect(item.category_id);
+    document.getElementById('item-modal').classList.add('active');
+}
+
+function populateCategorySelect(selectedId) {
+    const sel = document.getElementById('item-category');
+    sel.innerHTML = categories.map(c =>
+        `<option value="${c.id}" ${c.id === selectedId ? 'selected' : ''}>${c.name}</option>`
+    ).join('');
+}
+
+function closeItemModal() {
+    document.getElementById('item-modal').classList.remove('active');
+}
+
+async function saveItem() {
+    const id = document.getElementById('edit-item-id').value;
+    const data = {
+        name: document.getElementById('item-name').value,
+        description: document.getElementById('item-description').value,
+        price: parseFloat(document.getElementById('item-price').value),
+        category_id: parseInt(document.getElementById('item-category').value),
+        is_available: document.getElementById('item-available').checked,
+    };
+    if (!data.name || isNaN(data.price)) { alert('Name and price are required'); return; }
+
+    if (id) {
+        await api(`/api/menu/items/${id}`, 'PUT', data);
+    } else {
+        await api('/api/menu/items', 'POST', data);
+    }
+    closeItemModal();
+    loadMenu();
+}
+
+async function deleteItem(id) {
+    if (!confirm('Delete this menu item?')) return;
+    await api(`/api/menu/items/${id}`, 'DELETE');
+    loadMenu();
+}
+
+loadMenu();
+</script>
+{% endblock %}

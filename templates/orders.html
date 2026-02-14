@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% block title %}Orders - Restaurant Manager{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Orders</h1>
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <select id="filter-status" onchange="loadOrders()" style="padding: 0.5rem; border-radius: 6px; border: 1px solid var(--border);">
+            <option value="">All Statuses</option>
+            <option value="pending">Pending</option>
+            <option value="preparing">Preparing</option>
+            <option value="ready">Ready</option>
+            <option value="served">Served</option>
+            <option value="paid">Paid</option>
+        </select>
+        <button class="btn btn-primary" onclick="showNewOrder()">+ New Order</button>
+    </div>
+</div>
+
+<div id="orders-list">
+    <div class="card text-center">Loading...</div>
+</div>
+
+<!-- New Order Modal -->
+<div class="modal-overlay" id="order-modal">
+    <div class="modal" style="max-width: 600px;">
+        <h2>New Order</h2>
+        <div class="form-group">
+            <label>Table</label>
+            <select id="order-table"></select>
+        </div>
+
+        <div class="form-group">
+            <label>Add Items</label>
+            <select id="order-menu-item">
+                <option value="">Select an item...</option>
+            </select>
+        </div>
+
+        <div style="display: flex; gap: 0.5rem; align-items: end; margin-bottom: 1rem;">
+            <div class="form-group" style="margin-bottom: 0; width: 80px;">
+                <label>Qty</label>
+                <input type="number" id="order-item-qty" value="1" min="1">
+            </div>
+            <div class="form-group" style="margin-bottom: 0; flex: 1;">
+                <label>Notes</label>
+                <input type="text" id="order-item-notes" placeholder="Special instructions...">
+            </div>
+            <button class="btn btn-info" onclick="addOrderItem()">Add</button>
+        </div>
+
+        <table id="order-items-table" style="display: none;">
+            <thead>
+                <tr><th>Item</th><th>Qty</th><th>Price</th><th></th></tr>
+            </thead>
+            <tbody id="order-items-body"></tbody>
+            <tfoot>
+                <tr><td colspan="2"><strong>Total</strong></td><td colspan="2" class="price" id="order-total">$0.00</td></tr>
+            </tfoot>
+        </table>
+
+        <div class="form-group mt-1">
+            <label>Order Notes</label>
+            <textarea id="order-notes" rows="2" placeholder="General order notes..."></textarea>
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn btn-outline" onclick="closeOrderModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="submitOrder()">Place Order</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let menuItems = [];
+let orderItems = [];
+
+async function loadOrders() {
+    const status = document.getElementById('filter-status').value;
+    const url = status ? `/api/orders?status=${status}` : '/api/orders';
+    const orders = await api(url);
+
+    const container = document.getElementById('orders-list');
+    if (orders.length === 0) {
+        container.innerHTML = '<div class="empty-state"><p>No orders found</p></div>';
+        return;
+    }
+
+    container.innerHTML = orders.map(o => `
+        <div class="card" style="margin-bottom: 1rem;">
+            <div style="display: flex; justify-content: space-between; align-items: start;">
+                <div>
+                    <h3>Order #${o.id} - Table ${o.table_number}</h3>
+                    <small style="color: var(--gray);">${new Date(o.created_at).toLocaleString()}</small>
+                </div>
+                <span class="badge badge-${o.status}">${o.status}</span>
+            </div>
+            <ul class="order-items-list" style="margin: 1rem 0;">
+                ${o.items.map(item => `
+                    <li>
+                        <span>${item.quantity}x ${item.menu_item_name} ${item.notes ? '<small style="color:var(--gray)">(' + item.notes + ')</small>' : ''}</span>
+                        <span class="price">$${item.subtotal.toFixed(2)}</span>
+                    </li>
+                `).join('')}
+            </ul>
+            ${o.notes ? `<p style="color: var(--gray); font-style: italic; margin-bottom: 0.5rem;">Note: ${o.notes}</p>` : ''}
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <strong class="price" style="font-size: 1.1rem;">Total: $${o.total_amount.toFixed(2)}</strong>
+                <div style="display: flex; gap: 0.25rem;">
+                    ${getStatusActions(o)}
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function getStatusActions(order) {
+    const actions = {
+        pending: `<button class="btn btn-sm btn-warning" onclick="updateStatus(${order.id}, 'preparing')">Start Preparing</button>
+                  <button class="btn btn-sm btn-danger" onclick="cancelOrder(${order.id})">Cancel</button>`,
+        preparing: `<button class="btn btn-sm btn-info" onclick="updateStatus(${order.id}, 'ready')">Mark Ready</button>`,
+        ready: `<button class="btn btn-sm btn-success" onclick="updateStatus(${order.id}, 'served')">Mark Served</button>`,
+        served: `<button class="btn btn-sm btn-primary" onclick="updateStatus(${order.id}, 'paid')">Mark Paid</button>`,
+        paid: '',
+    };
+    return actions[order.status] || '';
+}
+
+async function updateStatus(orderId, status) {
+    await api(`/api/orders/${orderId}`, 'PUT', { status });
+    loadOrders();
+}
+
+async function cancelOrder(orderId) {
+    if (!confirm('Cancel this order?')) return;
+    await api(`/api/orders/${orderId}`, 'DELETE');
+    loadOrders();
+}
+
+// New Order
+async function showNewOrder() {
+    orderItems = [];
+    const [tables, items] = await Promise.all([
+        api('/api/tables?status=available'),
+        api('/api/menu/items?available=true'),
+    ]);
+
+    menuItems = items;
+
+    const tableSelect = document.getElementById('order-table');
+    if (tables.length === 0) {
+        alert('No available tables. Please free up a table first.');
+        return;
+    }
+    // Also include occupied tables (for adding to existing table's orders)
+    const allTables = await api('/api/tables');
+    tableSelect.innerHTML = allTables
+        .filter(t => t.status !== 'reserved')
+        .map(t => `<option value="${t.id}">Table ${t.number} (${t.status})</option>`)
+        .join('');
+
+    const itemSelect = document.getElementById('order-menu-item');
+    itemSelect.innerHTML = '<option value="">Select an item...</option>' +
+        items.map(i => `<option value="${i.id}">${i.name} - $${i.price.toFixed(2)}</option>`).join('');
+
+    document.getElementById('order-items-body').innerHTML = '';
+    document.getElementById('order-items-table').style.display = 'none';
+    document.getElementById('order-total').textContent = '$0.00';
+    document.getElementById('order-notes').value = '';
+    document.getElementById('order-item-qty').value = '1';
+    document.getElementById('order-item-notes').value = '';
+    document.getElementById('order-modal').classList.add('active');
+}
+
+function addOrderItem() {
+    const itemId = parseInt(document.getElementById('order-menu-item').value);
+    const qty = parseInt(document.getElementById('order-item-qty').value) || 1;
+    const notes = document.getElementById('order-item-notes').value;
+
+    if (!itemId) { alert('Select a menu item'); return; }
+
+    const menuItem = menuItems.find(i => i.id === itemId);
+    orderItems.push({
+        menu_item_id: itemId,
+        name: menuItem.name,
+        price: menuItem.price,
+        quantity: qty,
+        notes: notes,
+    });
+
+    renderOrderItems();
+    document.getElementById('order-menu-item').value = '';
+    document.getElementById('order-item-qty').value = '1';
+    document.getElementById('order-item-notes').value = '';
+}
+
+function removeOrderItem(index) {
+    orderItems.splice(index, 1);
+    renderOrderItems();
+}
+
+function renderOrderItems() {
+    const tbody = document.getElementById('order-items-body');
+    const table = document.getElementById('order-items-table');
+
+    if (orderItems.length === 0) {
+        table.style.display = 'none';
+        return;
+    }
+
+    table.style.display = 'table';
+    let total = 0;
+    tbody.innerHTML = orderItems.map((item, idx) => {
+        const subtotal = item.price * item.quantity;
+        total += subtotal;
+        return `
+            <tr>
+                <td>${item.name}${item.notes ? ' <small>(' + item.notes + ')</small>' : ''}</td>
+                <td>${item.quantity}</td>
+                <td class="price">$${subtotal.toFixed(2)}</td>
+                <td><button class="btn btn-sm btn-danger" onclick="removeOrderItem(${idx})">X</button></td>
+            </tr>
+        `;
+    }).join('');
+
+    document.getElementById('order-total').textContent = `$${total.toFixed(2)}`;
+}
+
+function closeOrderModal() {
+    document.getElementById('order-modal').classList.remove('active');
+}
+
+async function submitOrder() {
+    if (orderItems.length === 0) { alert('Add at least one item'); return; }
+
+    const data = {
+        table_id: parseInt(document.getElementById('order-table').value),
+        notes: document.getElementById('order-notes').value,
+        items: orderItems.map(i => ({
+            menu_item_id: i.menu_item_id,
+            quantity: i.quantity,
+            notes: i.notes,
+        })),
+    };
+
+    await api('/api/orders', 'POST', data);
+    closeOrderModal();
+    loadOrders();
+}
+
+loadOrders();
+</script>
+{% endblock %}

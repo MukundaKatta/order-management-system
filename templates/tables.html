@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Tables - Restaurant Manager{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Table Management</h1>
+    <button class="btn btn-primary" onclick="showAddTable()">+ Add Table</button>
+</div>
+
+<div class="card-grid" id="tables-grid">
+    <div class="card text-center">Loading...</div>
+</div>
+
+<!-- Add/Edit Table Modal -->
+<div class="modal-overlay" id="table-modal">
+    <div class="modal">
+        <h2 id="table-modal-title">Add Table</h2>
+        <input type="hidden" id="edit-table-id">
+        <div class="form-group">
+            <label>Table Number</label>
+            <input type="number" id="table-number" min="1" required>
+        </div>
+        <div class="form-group">
+            <label>Capacity (seats)</label>
+            <input type="number" id="table-capacity" min="1" value="4" required>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveTable()">Save</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadTables() {
+    const tables = await api('/api/tables');
+    const grid = document.getElementById('tables-grid');
+
+    if (tables.length === 0) {
+        grid.innerHTML = '<div class="empty-state"><p>No tables configured. Add your first table!</p></div>';
+        return;
+    }
+
+    grid.innerHTML = tables.map(t => `
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: start;">
+                <div>
+                    <h3>Table ${t.number}</h3>
+                    <p style="color: var(--gray); margin: 0.25rem 0;">${t.capacity} seats</p>
+                    <span class="badge badge-${t.status}">${t.status}</span>
+                </div>
+                <div style="display: flex; gap: 0.25rem;">
+                    <button class="btn btn-sm btn-outline" onclick="editTable(${t.id}, ${t.number}, ${t.capacity})">Edit</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteTable(${t.id})">Delete</button>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function showAddTable() {
+    document.getElementById('table-modal-title').textContent = 'Add Table';
+    document.getElementById('edit-table-id').value = '';
+    document.getElementById('table-number').value = '';
+    document.getElementById('table-capacity').value = '4';
+    document.getElementById('table-modal').classList.add('active');
+}
+
+function editTable(id, number, capacity) {
+    document.getElementById('table-modal-title').textContent = 'Edit Table';
+    document.getElementById('edit-table-id').value = id;
+    document.getElementById('table-number').value = number;
+    document.getElementById('table-capacity').value = capacity;
+    document.getElementById('table-modal').classList.add('active');
+}
+
+function closeModal() {
+    document.getElementById('table-modal').classList.remove('active');
+}
+
+async function saveTable() {
+    const id = document.getElementById('edit-table-id').value;
+    const data = {
+        number: parseInt(document.getElementById('table-number').value),
+        capacity: parseInt(document.getElementById('table-capacity').value),
+    };
+
+    if (!data.number || !data.capacity) {
+        alert('Please fill in all fields');
+        return;
+    }
+
+    if (id) {
+        await api(`/api/tables/${id}`, 'PUT', data);
+    } else {
+        await api('/api/tables', 'POST', data);
+    }
+
+    closeModal();
+    loadTables();
+}
+
+async function deleteTable(id) {
+    if (!confirm('Delete this table?')) return;
+    await api(`/api/tables/${id}`, 'DELETE');
+    loadTables();
+}
+
+loadTables();
+</script>
+{% endblock %}

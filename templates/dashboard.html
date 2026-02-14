@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Restaurant Manager{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Dashboard</h1>
+</div>
+
+<div class="stats-grid" id="stats">
+    <div class="stat-card">
+        <div class="stat-value" id="stat-active-orders">-</div>
+        <div class="stat-label">Active Orders</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="stat-tables-occupied">-</div>
+        <div class="stat-label">Tables Occupied</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="stat-tables-available">-</div>
+        <div class="stat-label">Tables Available</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="stat-revenue">-</div>
+        <div class="stat-label">Today's Revenue</div>
+    </div>
+</div>
+
+<h2 style="margin-bottom: 1rem; color: var(--secondary);">Recent Orders</h2>
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>Order #</th>
+                <th>Table</th>
+                <th>Items</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th>Time</th>
+            </tr>
+        </thead>
+        <tbody id="recent-orders">
+            <tr><td colspan="6" class="text-center">Loading...</td></tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadDashboard() {
+    const [orders, tables] = await Promise.all([
+        api('/api/orders'),
+        api('/api/tables'),
+    ]);
+
+    const activeOrders = orders.filter(o => !['paid'].includes(o.status));
+    const paidOrders = orders.filter(o => o.status === 'paid');
+    const revenue = paidOrders.reduce((sum, o) => sum + o.total_amount, 0);
+
+    document.getElementById('stat-active-orders').textContent = activeOrders.length;
+    document.getElementById('stat-tables-occupied').textContent =
+        tables.filter(t => t.status === 'occupied').length;
+    document.getElementById('stat-tables-available').textContent =
+        tables.filter(t => t.status === 'available').length;
+    document.getElementById('stat-revenue').textContent = '$' + revenue.toFixed(2);
+
+    const tbody = document.getElementById('recent-orders');
+    if (orders.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center empty-state"><p>No orders yet</p></td></tr>';
+        return;
+    }
+    tbody.innerHTML = orders.slice(0, 10).map(o => `
+        <tr>
+            <td>#${o.id}</td>
+            <td>Table ${o.table_number}</td>
+            <td>${o.items.length} item(s)</td>
+            <td class="price">$${o.total_amount.toFixed(2)}</td>
+            <td><span class="badge badge-${o.status}">${o.status}</span></td>
+            <td>${new Date(o.created_at).toLocaleTimeString()}</td>
+        </tr>
+    `).join('');
+}
+loadDashboard();
+</script>
+{% endblock %}
