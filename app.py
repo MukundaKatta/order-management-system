@@ -4,6 +4,7 @@ from config import Config
 from models import db
 from routes.menu import menu_bp
 from routes.orders import orders_bp
+from routes.reports import reports_bp
 from routes.tables import tables_bp
 
 
@@ -17,6 +18,7 @@ def create_app():
     app.register_blueprint(menu_bp)
     app.register_blueprint(orders_bp)
     app.register_blueprint(tables_bp)
+    app.register_blueprint(reports_bp)
 
     # Page routes
     @app.route("/")
