@@ -1,0 +1,59 @@
+{
+  "name": "Amogha Order Manager",
+  "short_name": "Amogha",
+  "description": "Amogha restaurant order management system for managing tables, menus, and orders.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#FF6B35",
+  "background_color": "#ffffff",
+  "scope": "/",
+  "lang": "en-US",
+  "categories": ["business", "food"],
+  "icons": [
+    {
+      "src": "/static/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/static/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "View Orders",
+      "short_name": "Orders",
+      "url": "/orders",
+      "description": "View and manage current orders"
+    },
+    {
+      "name": "Manage Tables",
+      "short_name": "Tables",
+      "url": "/tables",
+      "description": "View table availability"
+    },
+    {
+      "name": "Menu",
+      "short_name": "Menu",
+      "url": "/menu",
+      "description": "Browse and edit the menu"
+    }
+  ]
+}
